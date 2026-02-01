@@ -14,9 +14,11 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
 )
 
+
 st.set_page_config(page_title="Heart Disease Prediction App", layout="centered")
 
 st.title(" Heart Disease Classification – ML Model Comparison")
+
 st.write(
     """
 Upload a **CSV test dataset**, select a trained model, and view
@@ -32,10 +34,8 @@ Models supported:
 """
 )
 
-imputer = joblib.load("model/imputer.pkl")
 scaler = joblib.load("model/scaler.pkl")
 trained_columns = joblib.load("model/training_columns.pkl")
-
 
 MODEL_PATHS = {
     "Logistic Regression": "model/logistic_regression.pkl",
@@ -50,7 +50,6 @@ MODEL_PATHS = {
 uploaded_file = st.file_uploader("Upload CSV test dataset", type=["csv"])
 model_name = st.selectbox("Select Model", list(MODEL_PATHS.keys()))
 
-
 if uploaded_file is not None:
 
     df = pd.read_csv(uploaded_file)
@@ -64,7 +63,7 @@ if uploaded_file is not None:
         st.error("Target column 'num' not found in uploaded file.")
         st.stop()
 
-    # Convert to binary
+    # Convert target to binary
     df[TARGET_COL] = df[TARGET_COL].apply(lambda x: 1 if x > 0 else 0)
 
     # Drop ID if exists
@@ -74,28 +73,28 @@ if uploaded_file is not None:
     X = df.drop(columns=[TARGET_COL])
     y_true = df[TARGET_COL]
 
-    # One-hot encode categoricals
+    # One-hot encode categorical columns
     cat_cols = X.select_dtypes(include=["object"]).columns.tolist()
     X = pd.get_dummies(X, columns=cat_cols, drop_first=True)
 
-    # Align columns to training-time schema
+    # Align columns with training schema
     for col in trained_columns:
         if col not in X.columns:
             X[col] = 0
 
     X = X[trained_columns]
 
-    # ----------------------------
-    # IMPUTE + SCALE (FIXED)
-    # ----------------------------
 
-    X_array = imputer.transform(X.values)
+    # Fill NaNs with median
+    X = X.fillna(X.median())
+
+    X_array = X.values.astype(float)
     X_scaled = scaler.transform(X_array)
 
-    # Load selected model
+    # Load model
     model = joblib.load(MODEL_PATHS[model_name])
 
-    st.subheader(f" Results for {model_name}")
+    st.subheader(f"📊 Results for {model_name}")
 
     # Predict
     if model_name in ["Logistic Regression", "KNN"]:
@@ -105,7 +104,6 @@ if uploaded_file is not None:
         y_pred = model.predict(X_array)
         y_prob = model.predict_proba(X_array)[:, 1]
 
-    # Metrics
     acc = accuracy_score(y_true, y_pred)
     auc = roc_auc_score(y_true, y_prob)
     prec = precision_score(y_true, y_pred)
@@ -123,7 +121,7 @@ if uploaded_file is not None:
         st.metric("Recall", round(rec, 3))
         st.metric("F1 Score", round(f1, 3))
 
-    # Confusion Matrix
+
     st.subheader(" Confusion Matrix")
 
     cm = confusion_matrix(y_true, y_pred)
