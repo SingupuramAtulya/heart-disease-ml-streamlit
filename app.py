@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import matplotlib.pyplot as plt
+
 from sklearn.metrics import (
     accuracy_score,
     roc_auc_score,
@@ -15,7 +16,7 @@ from sklearn.metrics import (
 
 st.set_page_config(page_title="Heart Disease Prediction App", layout="centered")
 
-st.title("❤️ Heart Disease Classification – ML Model Comparison")
+st.title(" Heart Disease Classification – ML Model Comparison")
 st.write(
     """
 Upload a **CSV test dataset**, select a trained model, and view
@@ -31,16 +32,10 @@ Models supported:
 """
 )
 
-# --------------------------------------------------
-# LOAD SAVED PREPROCESSORS
-# --------------------------------------------------
-
 imputer = joblib.load("model/imputer.pkl")
 scaler = joblib.load("model/scaler.pkl")
+trained_columns = joblib.load("model/training_columns.pkl")
 
-# --------------------------------------------------
-# MODEL PATHS
-# --------------------------------------------------
 
 MODEL_PATHS = {
     "Logistic Regression": "model/logistic_regression.pkl",
@@ -51,23 +46,16 @@ MODEL_PATHS = {
     "XGBoost": "model/xgboost.pkl",
 }
 
-# --------------------------------------------------
-# FILE UPLOAD
-# --------------------------------------------------
 
 uploaded_file = st.file_uploader("Upload CSV test dataset", type=["csv"])
-
 model_name = st.selectbox("Select Model", list(MODEL_PATHS.keys()))
 
-# --------------------------------------------------
-# MAIN LOGIC
-# --------------------------------------------------
 
 if uploaded_file is not None:
 
     df = pd.read_csv(uploaded_file)
 
-    st.subheader("📄 Uploaded Data Preview")
+    st.subheader(" Uploaded Data Preview")
     st.dataframe(df.head())
 
     TARGET_COL = "num"
@@ -76,44 +64,46 @@ if uploaded_file is not None:
         st.error("Target column 'num' not found in uploaded file.")
         st.stop()
 
-    # Binary conversion
+    # Convert to binary
     df[TARGET_COL] = df[TARGET_COL].apply(lambda x: 1 if x > 0 else 0)
 
-    # Drop ID
+    # Drop ID if exists
     if "id" in df.columns:
         df = df.drop(columns=["id"])
 
     X = df.drop(columns=[TARGET_COL])
     y_true = df[TARGET_COL]
 
-    # Encode categoricals
+    # One-hot encode categoricals
     cat_cols = X.select_dtypes(include=["object"]).columns.tolist()
     X = pd.get_dummies(X, columns=cat_cols, drop_first=True)
 
-    # IMPORTANT: align columns with training-time features
-    trained_columns = joblib.load("model/training_columns.pkl")
-
+    # Align columns to training-time schema
     for col in trained_columns:
         if col not in X.columns:
             X[col] = 0
 
     X = X[trained_columns]
 
-    # Impute + scale
-    X = imputer.transform(X)
-    X_scaled = scaler.transform(X)
+    # ----------------------------
+    # IMPUTE + SCALE (FIXED)
+    # ----------------------------
 
-    # Load model
+    X_array = imputer.transform(X.values)
+    X_scaled = scaler.transform(X_array)
+
+    # Load selected model
     model = joblib.load(MODEL_PATHS[model_name])
 
-    st.subheader(f"📊 Results for {model_name}")
+    st.subheader(f" Results for {model_name}")
 
+    # Predict
     if model_name in ["Logistic Regression", "KNN"]:
         y_pred = model.predict(X_scaled)
         y_prob = model.predict_proba(X_scaled)[:, 1]
     else:
-        y_pred = model.predict(X)
-        y_prob = model.predict_proba(X)[:, 1]
+        y_pred = model.predict(X_array)
+        y_prob = model.predict_proba(X_array)[:, 1]
 
     # Metrics
     acc = accuracy_score(y_true, y_pred)
@@ -134,7 +124,7 @@ if uploaded_file is not None:
         st.metric("F1 Score", round(f1, 3))
 
     # Confusion Matrix
-    st.subheader("🧮 Confusion Matrix")
+    st.subheader(" Confusion Matrix")
 
     cm = confusion_matrix(y_true, y_pred)
     fig, ax = plt.subplots()
@@ -143,4 +133,4 @@ if uploaded_file is not None:
     st.pyplot(fig)
 
 else:
-    st.info("👆 Upload a CSV file to begin.")
+    st.info(" Upload a CSV file to begin.")
